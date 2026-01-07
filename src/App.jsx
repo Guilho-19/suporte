@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Plus, Search, AlertCircle, Clock, Bug, Database, Server, User, X, Sun, Moon, 
+  Plus, Search, AlertCircle, Clock, Bug, Database, Server, User, Users, X, Sun, Moon, 
   LayoutDashboard, KanbanSquare, TrendingUp, Activity, AlertTriangle, DatabaseZap, 
   Package, Pencil, Trash2, LogOut, Lock, Book, Building2, UserCheck, Hourglass
 } from 'lucide-react';
@@ -25,9 +25,20 @@ const TICKET_TYPES = [
   "SIMFisio", "SIMFluxo", "SIMFolha", "SIMFrente", "SIMInventário", "SIMLivros", 
   "SIMLivrosCTE", "SIMLog", "SIMLoja", "SIMManad", "SIMOrca", "SIMPag", 
   "SIMPagamento", "SIMPCP", "SIMPDV", "SIMPIS_COFINS", "SIMPlanoMestre", 
-  "SIMPneus", "SIMProjetos", "SIMRec", "SIMRecebimento", "SIMReport", "SIMRet", 
+  "SIMPneus", "SIMProjetos", "SIMRecebimento", "SIMRec", "SIMRecebimento", "SIMReport", "SIMRet", 
   "SIMSIC", "SIMSmartSales", "SIMSPED_ECF", "SIMSPED_Fiscal", "SIMSPED_Reinf", 
   "SIMTecelagem", "SIMTecidos", "SIMTinturaria", "SIMVendas"
+].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+
+// --- LISTA DE MEMBROS DA EQUIPE (Para atribuição de tickets) ---
+const TEAM_MEMBERS = [
+  "Fabiana",
+  "Luiz Carrijo",
+  "Henrique",
+  "Arthur",
+  "Kelvin",
+  "Ana",
+  "Guilherme"
 ].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
 
 const PRIORITY_ORDER = {
@@ -79,6 +90,7 @@ const Dashboard = ({ data }) => {
   const allTickets = Object.values(data.columns).flatMap(col => col.items || []);
   const totalTickets = allTickets.length;
   
+  // Dados para Gráfico de Pizza (Prioridade)
   const byPriority = allTickets.reduce((acc, ticket) => {
     acc[ticket.priority] = (acc[ticket.priority] || 0) + 1;
     return acc;
@@ -92,6 +104,7 @@ const Dashboard = ({ data }) => {
     { name: 'Baixa', value: byPriority['Baixa'] || 0, color: '#3B82F6' },
   ].filter(item => item.value > 0);
 
+  // Dados para Gráfico de Barras (Por Usuário)
   const byUser = allTickets.reduce((acc, ticket) => {
     const user = ticket.responsible ? ticket.responsible.split(' ')[0] : 'N/A';
     acc[user] = (acc[user] || 0) + 1;
@@ -100,24 +113,32 @@ const Dashboard = ({ data }) => {
 
   const barData = Object.entries(byUser)
     .map(([name, tickets]) => ({ name, tickets }))
-    .sort((a, b) => b.tickets - a.tickets)
-    .slice(0, 5);
+    .sort((a, b) => b.tickets - a.tickets);
 
-  // --- Lógica Corrigida para Diferenciar Ano ---
+  // --- NOVO CÁLCULO: Dados para Gráfico de Barras (Por Módulo) ---
+  const byModule = allTickets.reduce((acc, ticket) => {
+    const moduleName = ticket.type || 'N/A';
+    acc[moduleName] = (acc[moduleName] || 0) + 1;
+    return acc;
+  }, {});
+
+  const moduleData = Object.entries(byModule)
+    .map(([name, tickets]) => ({ name, tickets }))
+    .sort((a, b) => b.tickets - a.tickets)
+    .slice(0, 5); // Top 5 Módulos
+
   const byDate = allTickets.reduce((acc, ticket) => {
     if (!ticket.createdAt) return acc;
-    // Usa ISO string (YYYY-MM-DD) como chave para garantir unicidade e ordenação correta
     const isoDate = new Date(ticket.createdAt).toISOString().split('T')[0];
     acc[isoDate] = (acc[isoDate] || 0) + 1;
     return acc;
   }, {});
 
   let lineData = Object.entries(byDate).map(([isoDate, count]) => {
-    // Formata a data para exibição no gráfico (dd/mm/yy)
     const [year, month, day] = isoDate.split('-');
     return { 
-      date: `${day}/${month}/${year.slice(2)}`, // Exibição: 05/01/26
-      originalDate: isoDate, // Mantém a data original para ordenação
+      date: `${day}/${month}/${year.slice(2)}`,
+      originalDate: isoDate,
       count 
     };
   });
@@ -125,13 +146,11 @@ const Dashboard = ({ data }) => {
   if (lineData.length === 0) {
      lineData = [{ date: 'Hoje', count: totalTickets, originalDate: new Date().toISOString().split('T')[0] }];
   }
-  
-  // Ordena cronologicamente usando a data ISO original
   lineData.sort((a, b) => a.originalDate.localeCompare(b.originalDate));
 
   const urgentCount = byPriority['Urgente'] || 0;
   
-  // --- CÁLCULO DO TEMPO MÉDIO DE RESOLUÇÃO ---
+  // --- CÁLCULO DO TEMPO MÉDIO DE RESOLUÇÃO (REAL) ---
   let avgResolutionTime = "N/A";
   const finishedTickets = allTickets.filter(t => 
     t.columnId === 'Finalizado' && 
@@ -154,7 +173,7 @@ const Dashboard = ({ data }) => {
     avgResolutionTime = `${hours}h ${minutes}m`;
   }
 
-  // --- CÁLCULO DE EFICIÊNCIA SEMANAL ---
+  // --- CÁLCULO DE EFICIÊNCIA SEMANAL (REAL) ---
   let weeklyEfficiency = "-";
   const oneWeekAgo = new Date();
   oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
@@ -227,22 +246,44 @@ const Dashboard = ({ data }) => {
             </ResponsiveContainer>
           </div>
         </div>
+        
+        {/* Gráfico de Barras - Por Usuário */}
         <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 lg:col-span-2">
-          <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-6">Tickets por Responsável (Top 5)</h3>
-          <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={barData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
-                <XAxis dataKey="name" stroke="#9CA3AF" fontSize={12} />
-                <YAxis stroke="#9CA3AF" fontSize={12} />
-                <Tooltip cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }} contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#fff' }} />
-                <Bar dataKey="tickets" fill="#8884d8" radius={[4, 4, 0, 0]}>
-                  {barData.map((entry, index) => (<Cell key={`cell-${index}`} fill={index % 2 === 0 ? '#3B82F6' : '#60A5FA'} />))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-64">
+             {/* Esquerda: Por Responsável */}
+             <div className="w-full h-full">
+                <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-6">Tickets por Responsável</h3>
+                <ResponsiveContainer width="100%" height="90%">
+                  <BarChart data={barData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
+                    <XAxis dataKey="name" stroke="#9CA3AF" fontSize={12} />
+                    <YAxis stroke="#9CA3AF" fontSize={12} />
+                    <Tooltip cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }} contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#fff' }} />
+                    <Bar dataKey="tickets" fill="#8884d8" radius={[4, 4, 0, 0]}>
+                      {barData.map((entry, index) => (<Cell key={`cell-${index}`} fill={index % 2 === 0 ? '#3B82F6' : '#60A5FA'} />))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+             </div>
+
+             {/* Direita: Por Módulo */}
+             <div className="w-full h-full border-l border-gray-200 dark:border-gray-700 pl-6">
+                 <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-6">Tickets por Módulo (Top 5)</h3>
+                 <ResponsiveContainer width="100%" height="90%">
+                  <BarChart layout="vertical" data={moduleData} margin={{ left: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} horizontal={false} />
+                    <XAxis type="number" stroke="#9CA3AF" fontSize={12} />
+                    <YAxis dataKey="name" type="category" stroke="#9CA3AF" fontSize={12} width={100} />
+                    <Tooltip cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }} contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#fff' }} />
+                    <Bar dataKey="tickets" fill="#10B981" radius={[0, 4, 4, 0]}>
+                      {moduleData.map((entry, index) => (<Cell key={`cell-${index}`} fill={index % 2 === 0 ? '#10B981' : '#34D399'} />))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+             </div>
           </div>
         </div>
+
       </div>
     </div>
   );
@@ -315,6 +356,7 @@ export default function App() {
   const [currentView, setCurrentView] = useState('board');
   const [dbStatus, setDbStatus] = useState('disconnected');
   const [isEditing, setIsEditing] = useState(false);
+  const [onlyMyTickets, setOnlyMyTickets] = useState(true);
   
   const [newTicket, setNewTicket] = useState({
     id: '', title: '', priority: 'Normal', type: TICKET_TYPES[0], requester: '', responsible: '', columnId: 'A Fazer'
@@ -339,6 +381,11 @@ export default function App() {
   };
 
   const canDeleteTicket = () => {
+    if (!user) return false;
+    return user.role === 'MASTER' || user.role === 'ADMIN';
+  };
+
+  const canAssignTicket = () => {
     if (!user) return false;
     return user.role === 'MASTER' || user.role === 'ADMIN';
   };
@@ -384,23 +431,28 @@ export default function App() {
   }, [user]);
 
   const filteredData = React.useMemo(() => {
-    if (!searchTerm) return data;
-    const lowerTerm = searchTerm.toLowerCase();
-    const newColumns = {};
-    Object.keys(data.columns).forEach(key => {
-       newColumns[key] = {
-         ...data.columns[key],
-         items: data.columns[key].items.filter(item => 
-           item.id.toLowerCase().includes(lowerTerm) ||
-           item.title.toLowerCase().includes(lowerTerm) ||
-           item.requester.toLowerCase().includes(lowerTerm) ||
-           (item.responsible && item.responsible.toLowerCase().includes(lowerTerm)) ||
-           item.type.toLowerCase().includes(lowerTerm)
-         )
-       }
-    });
-    return { ...data, columns: newColumns };
-  }, [data, searchTerm]);
+    let filtered = JSON.parse(JSON.stringify(data)); 
+    if (searchTerm) {
+        const lowerTerm = searchTerm.toLowerCase();
+        Object.keys(filtered.columns).forEach(key => {
+            filtered.columns[key].items = filtered.columns[key].items.filter(item => 
+                item.id.toLowerCase().includes(lowerTerm) ||
+                item.title.toLowerCase().includes(lowerTerm) ||
+                item.requester.toLowerCase().includes(lowerTerm) ||
+                (item.responsible && item.responsible.toLowerCase().includes(lowerTerm)) ||
+                item.type.toLowerCase().includes(lowerTerm)
+            );
+        });
+    }
+    if (onlyMyTickets) {
+        Object.keys(filtered.columns).forEach(key => {
+            filtered.columns[key].items = filtered.columns[key].items.filter(item => 
+                item.createdBy === user.id
+            );
+        });
+    }
+    return filtered;
+  }, [data, searchTerm, onlyMyTickets, user?.id]);
 
   const handleDragStart = (e, item, colId) => {
     if (!canEditTicket(item)) { e.preventDefault(); return; }
@@ -518,7 +570,7 @@ export default function App() {
 
   return (
     <div className={`${isDarkMode ? 'dark' : ''} h-full`}>
-      <div className="min-h-screen bg-[#F4F5F7] dark:bg-gray-900 font-sans text-gray-800 dark:text-gray-100 flex flex-col transition-colors duration-200">
+      <div className="h-screen overflow-hidden bg-[#F4F5F7] dark:bg-gray-900 font-sans text-gray-800 dark:text-gray-100 flex flex-col transition-colors duration-200">
         
         {/* Header */}
         <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-3 flex items-center justify-between shadow-sm z-10">
@@ -533,6 +585,15 @@ export default function App() {
             </nav>
           </div>
           <div className="flex items-center gap-4">
+            {/* Filter Toggle Button */}
+            <button
+              onClick={() => setOnlyMyTickets(!onlyMyTickets)}
+              className={`p-2 rounded-lg transition-colors ${onlyMyTickets ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' : 'text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700'}`}
+              title={onlyMyTickets ? "Visualizando apenas meus tickets" : "Visualizando tickets da equipe"}
+            >
+              {onlyMyTickets ? <User size={20} /> : <Users size={20} />}
+            </button>
+
             <div className="relative hidden md:block">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
                 <input type="text" placeholder="Buscar ticket..." className="pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 w-48 lg:w-64 text-sm text-gray-800 dark:text-white placeholder-gray-400 transition-colors" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
@@ -661,7 +722,12 @@ export default function App() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Status (Coluna)</label>
-                    <select className="w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-800 dark:text-white" value={newTicket.columnId} onChange={(e) => setNewTicket({...newTicket, columnId: e.target.value})}>
+                    <select 
+                        className={`w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-800 dark:text-white ${!canAssignTicket() ? 'opacity-50 cursor-not-allowed bg-gray-100' : ''}`}
+                        value={newTicket.columnId} 
+                        onChange={(e) => setNewTicket({...newTicket, columnId: e.target.value})}
+                        disabled={!canAssignTicket()} // Bloqueia se não for ADMIN/MASTER
+                    >
                       {data.columnOrder.map(colId => (<option key={colId} value={colId}>{data.columns[colId].title}</option>))}
                     </select>
                   </div>
@@ -672,7 +738,29 @@ export default function App() {
                 </div>
                 <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Responsável</label>
-                    <input type="text" required className="w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-800 dark:text-white" placeholder="Nome do técnico" value={newTicket.responsible} onChange={(e) => setNewTicket({...newTicket, responsible: e.target.value})} />
+                    {canAssignTicket() ? (
+                        <select 
+                            className="w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
+                            value={newTicket.responsible} 
+                            onChange={(e) => setNewTicket({...newTicket, responsible: e.target.value})}
+                        >
+                            <option value="" disabled>Selecione um responsável</option>
+                            {TEAM_MEMBERS.map(member => (
+                                <option key={member} value={member}>{member}</option>
+                            ))}
+                             {/* Fallback option in case the current responsible is not in the predefined list, so we don't lose data visually */}
+                             {!TEAM_MEMBERS.includes(newTicket.responsible) && newTicket.responsible && (
+                                 <option value={newTicket.responsible}>{newTicket.responsible}</option>
+                             )}
+                        </select>
+                    ) : (
+                        <input 
+                            type="text" 
+                            readOnly 
+                            className="w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-800 dark:text-white opacity-50 cursor-not-allowed bg-gray-100"
+                            value={newTicket.responsible} 
+                        />
+                    )}
                 </div>
                 <div className="pt-4 flex gap-3 justify-end items-center w-full">
                   {isEditing && canDeleteTicket() && (
