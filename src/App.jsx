@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Plus, Search, AlertCircle, Clock, Bug, Database, Server, User, Users, X, Sun, Moon, 
   LayoutDashboard, KanbanSquare, TrendingUp, Activity, AlertTriangle, DatabaseZap, 
-  Package, Pencil, Trash2, LogOut, Lock, Book, Building2, UserCheck, Hourglass
+  Package, Pencil, Trash2, LogOut, Lock, Book, Building2, UserCheck, Hourglass, Calendar // Adicionado Calendar
 } from 'lucide-react';
 import { 
   PieChart, Pie, Cell, 
@@ -91,7 +91,9 @@ const Dashboard = ({ data }) => {
   const totalTickets = allTickets.length;
   
   // Dados para Gráfico de Pizza (Prioridade)
+  // FILTRO: Ignora tickets Finalizados, em Apoio e Transferidos
   const byPriority = allTickets.reduce((acc, ticket) => {
+    if (ticket.columnId === 'Finalizado' || ticket.columnId === 'Apoio' || ticket.columnId === 'Transferido') return acc;
     acc[ticket.priority] = (acc[ticket.priority] || 0) + 1;
     return acc;
   }, {});
@@ -106,6 +108,9 @@ const Dashboard = ({ data }) => {
 
   // Dados para Gráfico de Barras (Por Usuário)
   const byUser = allTickets.reduce((acc, ticket) => {
+    // Filtro: Não exibir tickets finalizados na contagem por responsável (carga ativa)
+    if (ticket.columnId === 'Finalizado') return acc;
+
     const user = ticket.responsible ? ticket.responsible.split(' ')[0] : 'N/A';
     acc[user] = (acc[user] || 0) + 1;
     return acc;
@@ -148,7 +153,7 @@ const Dashboard = ({ data }) => {
   }
   lineData.sort((a, b) => a.originalDate.localeCompare(b.originalDate));
 
-  const urgentCount = byPriority['Urgente'] || 0;
+  const urgentCount = allTickets.filter(t => t.priority === 'Urgente' && t.columnId !== 'Finalizado').length;
   
   // --- CÁLCULO DO TEMPO MÉDIO DE RESOLUÇÃO (REAL) ---
   let avgResolutionTime = "N/A";
@@ -204,7 +209,7 @@ const Dashboard = ({ data }) => {
           <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-lg text-blue-600 dark:text-blue-400"><Activity size={24} /></div>
         </div>
         <div className="bg-white dark:bg-gray-800 p-5 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 flex items-center justify-between">
-          <div><p className="text-sm font-medium text-gray-500 dark:text-gray-400">Tickets Urgentes</p><p className="text-3xl font-bold text-red-600 dark:text-red-400 mt-1">{urgentCount}</p></div>
+          <div><p className="text-sm font-medium text-gray-500 dark:text-gray-400">Tickets Urgentes (Abertos)</p><p className="text-3xl font-bold text-red-600 dark:text-red-400 mt-1">{urgentCount}</p></div>
           <div className="p-3 bg-red-100 dark:bg-red-900/30 rounded-lg text-red-600 dark:text-red-400"><AlertTriangle size={24} /></div>
         </div>
         <div className="bg-white dark:bg-gray-800 p-5 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 flex items-center justify-between">
@@ -219,7 +224,7 @@ const Dashboard = ({ data }) => {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
-          <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-6">Distribuição por Prioridade</h3>
+          <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-6">Distribuição por Prioridade (Ativos)</h3>
           <div className="h-64 w-full flex justify-center">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -248,12 +253,10 @@ const Dashboard = ({ data }) => {
         </div>
         
         {/* Gráfico de Barras - Por Usuário */}
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 lg:col-span-2">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-64">
-             {/* Esquerda: Por Responsável */}
-             <div className="w-full h-full">
-                <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-6">Tickets por Responsável</h3>
-                <ResponsiveContainer width="100%" height="90%">
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
+            <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-6">Tickets por Responsável</h3>
+            <div className="h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={barData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
                     <XAxis dataKey="name" stroke="#9CA3AF" fontSize={12} />
@@ -264,12 +267,14 @@ const Dashboard = ({ data }) => {
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
-             </div>
+            </div>
+        </div>
 
-             {/* Direita: Por Módulo */}
-             <div className="w-full h-full border-l border-gray-200 dark:border-gray-700 pl-6">
-                 <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-6">Tickets por Módulo (Top 5)</h3>
-                 <ResponsiveContainer width="100%" height="90%">
+        {/* --- NOVO GRÁFICO: Tickets por Módulo (Horizontal) --- */}
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
+            <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-6">Tickets por Módulo (Top 5)</h3>
+            <div className="h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
                   <BarChart layout="vertical" data={moduleData} margin={{ left: 20 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} horizontal={false} />
                     <XAxis type="number" stroke="#9CA3AF" fontSize={12} />
@@ -280,8 +285,7 @@ const Dashboard = ({ data }) => {
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
-             </div>
-          </div>
+            </div>
         </div>
 
       </div>
@@ -357,9 +361,10 @@ export default function App() {
   const [dbStatus, setDbStatus] = useState('disconnected');
   const [isEditing, setIsEditing] = useState(false);
   const [onlyMyTickets, setOnlyMyTickets] = useState(true);
+  const [dateRange, setDateRange] = useState('7'); // Padrão: 7 dias
   
   const [newTicket, setNewTicket] = useState({
-    id: '', title: '', priority: 'Normal', type: TICKET_TYPES[0], requester: '', responsible: '', columnId: 'A Fazer'
+    id: '', title: '', description: '', priority: 'Normal', type: TICKET_TYPES[0], requester: '', responsible: '', columnId: 'A Fazer'
   });
   const [draggedItem, setDraggedItem] = useState(null);
   const [draggedSourceCol, setDraggedSourceCol] = useState(null);
@@ -432,6 +437,22 @@ export default function App() {
 
   const filteredData = React.useMemo(() => {
     let filtered = JSON.parse(JSON.stringify(data)); 
+    
+    // Filtro por Data
+    if (dateRange !== 'all') {
+        const cutoffDate = new Date();
+        cutoffDate.setDate(cutoffDate.getDate() - parseInt(dateRange));
+        cutoffDate.setHours(0, 0, 0, 0); // Ajusta para o início do dia
+
+        Object.keys(filtered.columns).forEach(key => {
+            filtered.columns[key].items = filtered.columns[key].items.filter(item => {
+                if (!item.createdAt) return false; 
+                const ticketDate = new Date(item.createdAt);
+                return ticketDate >= cutoffDate;
+            });
+        });
+    }
+
     if (searchTerm) {
         const lowerTerm = searchTerm.toLowerCase();
         Object.keys(filtered.columns).forEach(key => {
@@ -452,7 +473,7 @@ export default function App() {
         });
     }
     return filtered;
-  }, [data, searchTerm, onlyMyTickets, user?.id]);
+  }, [data, searchTerm, onlyMyTickets, user?.id, dateRange]);
 
   const handleDragStart = (e, item, colId) => {
     if (!canEditTicket(item)) { e.preventDefault(); return; }
@@ -508,7 +529,7 @@ export default function App() {
   };
 
   const openNewTicketModal = () => {
-    setNewTicket({ id: '', title: '', priority: 'Normal', type: TICKET_TYPES[0], requester: '', responsible: user.username, columnId: 'A Fazer' });
+    setNewTicket({ id: '', title: '', description: '', priority: 'Normal', type: TICKET_TYPES[0], requester: '', responsible: user.username, columnId: 'A Fazer' });
     setIsEditing(false);
     setIsModalOpen(true);
   };
@@ -516,7 +537,7 @@ export default function App() {
   const openEditModal = (ticket) => {
     if (!canEditTicket(ticket)) return;
     setNewTicket({
-      id: ticket.id, title: ticket.title, priority: ticket.priority, 
+      id: ticket.id, title: ticket.title, description: ticket.description || '', priority: ticket.priority, 
       type: ticket.type, requester: ticket.requester, responsible: ticket.responsible || '', columnId: ticket.columnId 
     });
     setIsEditing(true);
@@ -585,6 +606,24 @@ export default function App() {
             </nav>
           </div>
           <div className="flex items-center gap-4">
+            
+            {/* Date Filter Select */}
+            <div className="relative">
+              <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+              <select 
+                value={dateRange} 
+                onChange={(e) => setDateRange(e.target.value)}
+                className="pl-10 pr-8 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-gray-800 dark:text-white cursor-pointer"
+              >
+                <option value="7">Últimos 7 dias</option>
+                <option value="30">Últimos 30 dias</option>
+                <option value="90">Últimos 90 dias</option>
+                <option value="180">Últimos 180 dias</option>
+                <option value="365">Último 1 ano</option>
+                <option value="all">Ilimitado</option>
+              </select>
+            </div>
+
             {/* Filter Toggle Button */}
             <button
               onClick={() => setOnlyMyTickets(!onlyMyTickets)}
@@ -691,7 +730,7 @@ export default function App() {
 
         {isModalOpen && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm p-4">
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md p-6 transform transition-all scale-100 border border-gray-200 dark:border-gray-700">
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md p-6 transform transition-all scale-100 border border-gray-200 dark:border-gray-700 max-h-[90vh] overflow-y-auto">
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-lg font-bold text-gray-800 dark:text-white">{isEditing ? `Editar Ticket (${newTicket.id})` : "Novo Ticket N2"}</h2>
                 <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"><X size={20} /></button>
@@ -705,6 +744,19 @@ export default function App() {
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Título do Problema</label>
                   <input type="text" required className="w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-800 dark:text-white" placeholder="Ex: Erro ao gerar nota fiscal" value={newTicket.title} onChange={(e) => setNewTicket({...newTicket, title: e.target.value})} />
                 </div>
+                
+                {/* --- Novo Campo: Descrição --- */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Descrição</label>
+                  <textarea 
+                    className="w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
+                    rows="3"
+                    placeholder="Detalhes do chamado..."
+                    value={newTicket.description}
+                    onChange={(e) => setNewTicket({...newTicket, description: e.target.value})}
+                  />
+                </div>
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Prioridade</label>

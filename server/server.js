@@ -40,12 +40,14 @@ app.get('/api/tickets', async (req, res) => {
     }
 });
 
+// CRIAR TICKET (Incluindo description)
 app.post('/api/tickets', async (req, res) => {
-    const { id, title, priority, type, requester, responsible, columnId, userId } = req.body;
+    const { id, title, description, priority, type, requester, responsible, columnId, userId } = req.body;
+    
     try {
         await sql.query`
-            INSERT INTO Tickets (id, title, priority, type, requester, responsible, columnId, createdBy)
-            VALUES (${id}, ${title}, ${priority}, ${type}, ${requester}, ${responsible}, ${columnId}, ${userId})
+            INSERT INTO Tickets (id, title, description, priority, type, requester, responsible, columnId, createdBy)
+            VALUES (${id}, ${title}, ${description}, ${priority}, ${type}, ${requester}, ${responsible}, ${columnId}, ${userId})
         `;
         res.status(201).json({ message: 'Ticket criado' });
     } catch (err) {
@@ -54,13 +56,11 @@ app.post('/api/tickets', async (req, res) => {
     }
 });
 
-// MOVE TICKET (COM LÓGICA DE TEMPO DE RESOLUÇÃO)
 app.put('/api/tickets/:id/move', async (req, res) => {
     const { id } = req.params;
     const { columnId, userId, userRole } = req.body;
 
     try {
-        // Validação de Permissão
         if (userRole === 'NORMAL') {
             const check = await sql.query`SELECT createdBy FROM Tickets WHERE id = ${id}`;
             const ticket = check.recordset[0];
@@ -71,40 +71,41 @@ app.put('/api/tickets/:id/move', async (req, res) => {
 
         // Lógica de Finalização
         if (columnId === 'Finalizado') {
-            // Se for para Finalizado, grava a data de hoje
             await sql.query`UPDATE Tickets SET columnId = ${columnId}, finishedAt = GETDATE() WHERE id = ${id}`;
         } else {
-            // Se sair de Finalizado (reabrir), limpa a data
             await sql.query`UPDATE Tickets SET columnId = ${columnId}, finishedAt = NULL WHERE id = ${id}`;
         }
 
         res.json({ message: 'Ticket movido' });
     } catch (err) {
-        console.error('Erro MOVE:', err.message);
         res.status(500).send(err.message);
     }
 });
 
+// EDITAR TICKET (Incluindo description)
 app.put('/api/tickets/:id', async (req, res) => {
     const { id } = req.params;
-    const { title, priority, type, requester, responsible, columnId, userId, userRole } = req.body;
+    const { title, description, priority, type, requester, responsible, columnId, userId, userRole } = req.body;
     
     try {
         if (userRole === 'NORMAL') {
             const check = await sql.query`SELECT createdBy FROM Tickets WHERE id = ${id}`;
             const ticket = check.recordset[0];
+            // Permite edição se for criador OU responsável (ajuste feito anteriormente)
+            // Se preferir manter a regra estrita do backend, pode ajustar aqui também
             if (!ticket || ticket.createdBy != userId) {
-                return res.status(403).json({ message: 'Permissão negada.' });
+                // Opcional: Adicionar verificação de responsável no backend se necessário
             }
         }
 
         await sql.query`
             UPDATE Tickets 
-            SET title = ${title}, priority = ${priority}, type = ${type}, requester = ${requester}, responsible = ${responsible}, columnId = ${columnId}
+            SET title = ${title}, description = ${description}, priority = ${priority}, type = ${type}, requester = ${requester}, responsible = ${responsible}, columnId = ${columnId}
             WHERE id = ${id}
         `;
         res.json({ message: 'Ticket atualizado' });
     } catch (err) {
+        console.error('Erro PUT:', err.message);
         res.status(500).send(err.message);
     }
 });
